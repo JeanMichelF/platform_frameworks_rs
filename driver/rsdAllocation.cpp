@@ -33,6 +33,10 @@
 #include <GLES2/gl2.h>
 #include <GLES/glext.h>
 
+#ifdef __i386__
+#include <malloc.h>
+#endif // __i386__
+
 using namespace android;
 using namespace android::renderscript;
 
@@ -231,7 +235,12 @@ bool rsdAllocationInit(const Context *rsc, Allocation *alloc, bool forceZero) {
     void * ptr = NULL;
     if (alloc->mHal.state.usageFlags & RS_ALLOCATION_USAGE_IO_OUTPUT) {
     } else {
+#ifdef __i386__
+        // On X86, some SSE instructions require 16-byte alignment for user defined types in RenderScript
+        ptr = memalign(16, alloc->mHal.state.type->getSizeBytes());
+#else // __i386__
         ptr = malloc(alloc->mHal.state.type->getSizeBytes());
+#endif // __i386__
         if (!ptr) {
             free(drv);
             return false;

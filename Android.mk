@@ -39,6 +39,14 @@ LOCAL_C_INCLUDES += frameworks/compile/libbcc/include
 
 LOCAL_CFLAGS += $(rs_base_CFLAGS)
 
+ifeq ($(TARGET_ARCH),x86)
+  # Gcc changed the Linux X86 ABI from 4-byte stack alignment at function
+  # call boundaries, to 16-byte alignment. The Renderscript JIT assumes
+  # the 'new' 16-byte ABI, so these options provide interface compatibility
+  # for callers using the 'old' ABI.
+  LOCAL_CFLAGS += -mpreferred-stack-boundary=4 -mincoming-stack-boundary=2
+endif
+
 LOCAL_LDLIBS := -lpthread -ldl
 LOCAL_MODULE_TAGS := optional
 
@@ -149,6 +157,14 @@ LOCAL_C_INCLUDES += external/freetype/include
 LOCAL_C_INCLUDES += frameworks/compile/libbcc/include
 
 LOCAL_CFLAGS += $(rs_base_CFLAGS)
+
+ifeq ($(TARGET_ARCH),x86)
+  # Gcc changed the Linux X86 ABI from 4-byte stack alignment at function
+  # call boundaries, to 16-byte alignment. The Renderscript JIT assumes
+  # the 'new' 16-byte ABI, so these options provide interface compatibility
+  # for callers using the 'old' ABI.
+  LOCAL_CFLAGS += -mpreferred-stack-boundary=4 -mincoming-stack-boundary=2
+endif
 
 LOCAL_LDLIBS := -lpthread -ldl
 LOCAL_MODULE:= libRS
