@@ -295,6 +295,7 @@ void Shutdown(Context *rsc) {
     void *res;
     for (uint32_t ct = 0; ct < dc->mWorkers.mCount; ct++) {
         status = pthread_join(dc->mWorkers.mThreadId[ct], &res);
+        (void) status;  /* suppress unused-but-set error */
     }
     rsAssert(android_atomic_acquire_load(&dc->mWorkers.mRunningCount) == 0);
 
