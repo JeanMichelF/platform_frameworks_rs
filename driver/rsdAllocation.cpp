@@ -107,8 +107,11 @@ static void Update2DTexture(const Context *rsc, const Allocation *alloc, const v
 
 static void Upload2DTexture(const Context *rsc, const Allocation *alloc, bool isFirstUpload) {
     DrvAllocation *drv = (DrvAllocation *)alloc->mHal.drv;
+    rsdGLClearErrors();
 
     RSD_CALL_GL(glBindTexture, drv->glTarget, drv->textureID);
+    rsdGLCheckError(rsc, "Upload2DTexture 0 ");
+
     RSD_CALL_GL(glPixelStorei, GL_UNPACK_ALIGNMENT, 1);
 
     uint32_t faceCount = 1;

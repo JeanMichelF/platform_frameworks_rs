@@ -500,6 +500,12 @@ void rsdGLSetPriority(const Context *rsc, int32_t priority) {
     }
 }
 
+void rsdGLClearErrors() {
+    while (glGetError() != GL_NO_ERROR) {
+        ;
+    }
+}
+
 void rsdGLCheckError(const android::renderscript::Context *rsc,
                      const char *msg, bool isFatal) {
     GLenum err = glGetError();
