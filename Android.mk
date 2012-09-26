@@ -2,6 +2,9 @@
 LOCAL_PATH:=$(call my-dir)
 
 rs_base_CFLAGS := -Werror -Wall -Wno-unused-parameter -Wno-unused-variable
+ifeq ($(ARCH_X86_HAVE_SSE2), true)
+  rs_base_CFLAGS += -DARCH_X86_HAVE_SSE2
+endif
 ifeq ($(ARCH_ARM_HAVE_NEON), true)
   rs_base_CFLAGS += -DARCH_ARM_HAVE_NEON
 endif

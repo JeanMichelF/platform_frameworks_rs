@@ -117,6 +117,11 @@ bool rsdScriptInit(const Context *rsc,
         goto error;
     }
 
+    // SSE2- or above capable devices will use an optimized library.
+#if defined(ARCH_X86_HAVE_SSE2)
+    coreLib = "/system/lib/libclcore_x86.bc";
+#endif
+
     // NEON-capable devices can use an accelerated math library for all
     // reduced precision scripts.
 #if defined(ARCH_ARM_HAVE_NEON)
