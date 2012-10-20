@@ -550,6 +550,10 @@ static RsdSymbolTable gSyms[] = {
     { "_Z11rsAtomicCasPViii", (void *)&SC_AtomicCas, true },
     { "_Z11rsAtomicCasPVjjj", (void *)&SC_AtomicCas, true },
 
+    // Standard C library interfaces
+    { "expf", (void *)&expf, true },
+    { "powf", (void *)&powf, true },
+
     { NULL, NULL, false }
 };
 
