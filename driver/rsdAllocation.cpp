@@ -294,9 +294,12 @@ bool rsdAllocationInit(const Context *rsc, Allocation *alloc, bool forceZero) {
     uint8_t * ptr = NULL;
     if (alloc->mHal.state.usageFlags & RS_ALLOCATION_USAGE_IO_OUTPUT) {
     } else {
-
-        ptr = (uint8_t *)malloc(allocSize);
-        if (!ptr) {
+        // Some architectures (e.g. SSE/AVX with the [v]movap*
+        // instructions) have alignment requirements beyond what
+        // malloc provides, but that isn't captured by the driver
+        // framework.  Simply align to 32 bytes always, as that works
+        // with all known targets.
+        if (posix_memalign((void**)&ptr, 32, allocSize)) {
             free(drv);
             return false;
         }
