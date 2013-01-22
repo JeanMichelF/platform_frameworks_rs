@@ -289,7 +289,8 @@ bool rsdAllocationInit(const Context *rsc, Allocation *alloc, bool forceZero) {
     alloc->mHal.drv = drv;
 
     // Calculate the object size.
-    size_t allocSize = AllocationBuildPointerTable(rsc, alloc, alloc->getType(), NULL);
+    const Type *type = alloc->getType();
+    size_t allocSize = AllocationBuildPointerTable(rsc, alloc, type, NULL);
 
     uint8_t * ptr = NULL;
     if (alloc->mHal.state.usageFlags & RS_ALLOCATION_USAGE_IO_OUTPUT) {
@@ -297,15 +298,20 @@ bool rsdAllocationInit(const Context *rsc, Allocation *alloc, bool forceZero) {
         // Some architectures (e.g. SSE/AVX with the [v]movap*
         // instructions) have alignment requirements beyond what
         // malloc provides, but that isn't captured by the driver
-        // framework.  Simply align to 32 bytes always, as that works
-        // with all known targets.
-        if (posix_memalign((void**)&ptr, 32, allocSize)) {
+        // framework.
+        // As RS assumes data are allocated element-wise aligned, we just need
+        // ensure the allocated one is aligned to the one rounded to multiple
+        // of sizeof(void *).
+        size_t alignment = type->getElementSizeBytes();
+        size_t ptrSize = sizeof(void *);
+        alignment = ((alignment + ptrSize - 1) / ptrSize) * ptrSize;
+        if (posix_memalign((void**)&ptr, alignment, allocSize)) {
             free(drv);
             return false;
         }
     }
     // Build the pointer tables
-    size_t verifySize = AllocationBuildPointerTable(rsc, alloc, alloc->getType(), ptr);
+    size_t verifySize = AllocationBuildPointerTable(rsc, alloc, type, ptr);
     if(allocSize != verifySize) {
         rsAssert(!"Size mismatch");
     }
