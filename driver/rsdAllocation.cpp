@@ -300,10 +300,22 @@ bool rsdAllocationInit(const Context *rsc, Allocation *alloc, bool forceZero) {
         // malloc provides, but that isn't captured by the driver
         // framework.
         // As RS assumes data are allocated element-wise aligned, we just need
-        // ensure the allocated one is aligned to the one rounded to multiple
-        // of sizeof(void *).
+        // to ensure the allocated one is aligned to the one rounded to
+        // multiple of sizeof(void *) and power of 2.
         size_t alignment = type->getElementSizeBytes();
         size_t ptrSize = sizeof(void *);
+        // Round alignment to the nearest power of 2.
+        alignment--;
+        alignment |= alignment >> 1;
+        alignment |= alignment >> 2;
+        alignment |= alignment >> 4;
+        alignment |= alignment >> 8;
+        alignment |= alignment >> 16;
+#if __SIZEOF_SIZE_T__ == 8
+        alignment |= alignment >> 32;
+#endif
+        alignment++;
+        // Round alignment to multiple of sizeof(void *).
         alignment = ((alignment + ptrSize - 1) / ptrSize) * ptrSize;
         if (posix_memalign((void**)&ptr, alignment, allocSize)) {
             free(drv);
