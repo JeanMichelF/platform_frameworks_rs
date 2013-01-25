@@ -131,6 +131,15 @@ static void Convolve5x5_uchar4(const RsForEachStubParamStruct *p,
         x1++;
     }
 
+#if defined(ARCH_X86_HAVE_SSSE3)
+    if((x1 + 5) < x2) {
+        uint32_t len = (x2 - x1 - 5) >> 2;
+        rsdIntrinsicConvolve5x5_K(out, py0, py1, py2, py3, py4, cp->ip, len);
+        out += len << 2;
+        x1 += len << 2;
+    }
+#endif
+
 #if defined(ARCH_ARM_HAVE_NEON)
     if((x1 + 3) < x2) {
         uint32_t len = (x2 - x1 - 3) >> 1;
