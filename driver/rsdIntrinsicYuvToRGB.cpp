@@ -102,7 +102,7 @@ static void YuvToRGB_uchar4(const RsForEachStubParamStruct *p,
     uint32_t x2 = xend;
 
     if(x2 > x1) {
-#if defined(ARCH_ARM_HAVE_NEON)
+#if defined(ARCH_ARM_HAVE_NEON) || defined(ARCH_X86_HAVE_SSSE3)
         int32_t len = (x2 - x1 - 1) >> 3;
         if(len > 0) {
             rsdIntrinsicYuv_K(out, Y, uv, len, YuvCoeff);

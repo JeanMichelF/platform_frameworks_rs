@@ -30,6 +30,20 @@ static inline __m128i cvtepu8_epi32(__m128i x) {
 #endif
 }
 
+/* Signed extend packed 8-bit integer (in LBS) into packed 32-bit integer */
+static inline __m128i cvtepi8_epi16(__m128i x) {
+#if defined(__SSE4_1__)
+    return _mm_cvtepi8_epi16(x);
+#elif defined(__SSSE3__)
+    const __m128i M8to16 = _mm_set_epi32(0xff07ff06, 0xff05ff04, 0xff03ff02, 0xff01ff00);
+    x = _mm_shuffle_epi8(x, M8to16);
+    x = _mm_srli_epi16(x, 8);
+    return _mm_srai_epi16(x, 8);
+#else
+#   error "Require at least SSSE3"
+#endif
+}
+
 /* Signed extend packed 16-bit integer (in LBS) into packed 32-bit integer */
 static inline __m128i cvtepi16_epi32(__m128i x) {
 #if defined(__SSE4_1__)
@@ -409,6 +423,76 @@ void rsdIntrinsicBlurHF_K(void *dst,
         o = _mm_cvtps_epi32(pf);
         *(int *)dst = _mm_cvtsi128_si32(_mm_shuffle_epi8(o, Mu8));
         dst = (char *)dst + 4;
+    }
+}
+
+void rsdIntrinsicYuv_K(void *dst,
+                       const unsigned char *pY, const unsigned char *pUV,
+                       uint32_t count, const short *param) {
+    const __m128i Mv = _mm_set_epi32(0x0d0c0d0c, 0x09080908, 0x05040504, 0x01000100);
+    const __m128i Mu = _mm_set_epi32(0x0f0e0f0e, 0x0b0a0b0a, 0x07060706, 0x03020302);
+    __m128i biasY, biasUV;
+    __m128i c0, c1, c2, c3, c4;
+    __m128i Y, U, V, R, G, B, A;
+    uint32_t i;
+
+    biasY = _mm_loadu_si128((const __m128i *)param + 1);    /* 16 */
+    biasUV = _mm_loadu_si128((const __m128i *)param + 2);   /* 128 */
+
+    c0 = _mm_loadu_si128((const __m128i *)param + 3);       /* 298 */
+    c1 = _mm_set1_epi16(param[1]);                          /* 409 */
+    c2 = _mm_set1_epi16(param[2]);                          /* -100 */
+    c3 = _mm_set1_epi16(param[3]);                          /* 516 */
+    c4 = _mm_set1_epi16(param[4]);                          /* -208 */
+
+    A = _mm_loadu_si128((const __m128i *)param + 4);
+
+    for (i = 0; i < count; ++i) {
+        Y = cvtepi8_epi16(_mm_set1_epi64(*(const __m64 *)pY));
+        U = cvtepi8_epi16(_mm_set1_epi64(*(const __m64 *)pUV));
+
+        Y = _mm_sub_epi16(Y, biasY);
+        U = _mm_sub_epi16(U, biasUV);
+
+        V = _mm_shuffle_epi8(U, Mv);
+        U = _mm_shuffle_epi8(U, Mu);
+
+        Y = _mm_mullo_epi16(Y, c0);
+
+        R = _mm_add_epi16(Y, _mm_mullo_epi16(V, c1));
+        R = _mm_add_epi16(R, biasUV);
+        R = _mm_srai_epi16(R, 8);
+
+        G = _mm_add_epi16(Y, _mm_mullo_epi16(U, c2));
+        G = _mm_add_epi16(G, _mm_mullo_epi16(V, c4));
+        G = _mm_add_epi16(G, biasUV);
+        G = _mm_srai_epi16(G, 8);
+
+        B = _mm_add_epi16(Y, _mm_mullo_epi16(U, c3));
+        B = _mm_add_epi16(B, biasUV);
+        B = _mm_srai_epi16(B, 8);
+
+        /* R0R1R2R3R4R5R6R7 B0B1B2B3B4B5B6B7
+         * G0G1G2G3G4G5G6G7 A0A1A2A3A4A5A6A7 */
+        R = _mm_packs_epi16(R, B);
+        G = _mm_packs_epi16(G, A);
+
+        /* R0G0R1G1R2G2R3G3 R4G4R5G5R6G6R7G7
+         * B0A0B1A1B2A2B3A3 B4A4B5A5B6A6B7A7 */
+        B = _mm_unpacklo_epi8(R, G);
+        A = _mm_unpackhi_epi8(R, G);
+
+        /* R0G0B0A0R1G1B1A1 R2G2B2A2R3G3B3A3
+         * R4G4B4A4R5G5B5A5 R6G6B6A6R7G7B7A7 */
+        R = _mm_unpacklo_epi16(B, A);
+        G = _mm_unpackhi_epi16(B, A);
+
+        _mm_storeu_si128((__m128i *)dst, R);
+        _mm_storeu_si128((__m128i *)dst + 1, G);
+
+        pY += 8;
+        pUV += 8;
+        dst = (__m128i *)dst + 2;
     }
 }
 
