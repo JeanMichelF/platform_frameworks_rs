@@ -116,7 +116,7 @@ static void OneVF(float4 *out,
                   const uchar *ptrIn, int iStride, const float* gPtr, int ct,
                   int x1, int x2) {
 
-#if defined(ARCH_ARM_HAVE_NEON)
+#if defined(ARCH_ARM_HAVE_NEON) || defined(ARCH_X86_HAVE_SSSE3)
     {
         int t = (x2 - x1);
         t &= ~1;
@@ -218,7 +218,7 @@ static void Blur_uchar4(const RsForEachStubParamStruct *p,
         out++;
         x1++;
     }
-#if defined(ARCH_ARM_HAVE_NEON)
+#if defined(ARCH_ARM_HAVE_NEON) || defined(ARCH_X86_HAVE_SSSE3)
     if ((x1 + cp->iradius) < x2) {
         rsdIntrinsicBlurHF_K(out, ((float4 *)buf) - cp->iradius, cp->fp, cp->iradius * 2 + 1, x1, x2 - cp->iradius);
         out += (x2 - cp->iradius) - x1;
