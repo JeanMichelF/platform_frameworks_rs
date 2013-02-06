@@ -43,6 +43,12 @@ LOCAL_SRC_FILES:= \
 	driver/rsdShaderCache.cpp \
 	driver/rsdVertexArray.cpp
 
+ifeq ($(ARCH_X86_HAVE_SSSE3),true)
+    LOCAL_CFLAGS += -DARCH_X86_HAVE_SSSE3
+    LOCAL_SRC_FILES+= \
+        driver/rsdIntrinsicsX86.c
+endif
+
 ifeq ($(ARCH_ARM_HAVE_NEON),true)
     LOCAL_CFLAGS += -DARCH_ARM_HAVE_NEON
     LOCAL_SRC_FILES+= \
