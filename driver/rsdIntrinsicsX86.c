@@ -37,7 +37,7 @@ static inline __m128i cvtepi8_epi16(__m128i x) {
 #elif defined(__SSSE3__)
     const __m128i M8to16 = _mm_set_epi32(0xff07ff06, 0xff05ff04, 0xff03ff02, 0xff01ff00);
     x = _mm_shuffle_epi8(x, M8to16);
-    x = _mm_srli_epi16(x, 8);
+    x = _mm_slli_epi16(x, 8);
     return _mm_srai_epi16(x, 8);
 #else
 #   error "Require at least SSSE3"
@@ -51,7 +51,7 @@ static inline __m128i cvtepi16_epi32(__m128i x) {
 #elif defined(__SSSE3__)
     const __m128i M16to32 = _mm_set_epi32(0xffff0706, 0xffff0504, 0xffff0302, 0xffff0100);
     x = _mm_shuffle_epi8(x, M16to32);
-    x = _mm_srli_epi32(x, 16);
+    x = _mm_slli_epi32(x, 16);
     return _mm_srai_epi32(x, 16);
 #else
 #   error "Require at least SSSE3"
@@ -66,10 +66,10 @@ static inline __m128i packus_epi32(__m128i lo, __m128i hi) {
     const __m128i C1 = _mm_set_epi32(0xffff, 0xffff, 0xffff, 0xffff);
     const __m128i M32to16L = _mm_set_epi32(0xffffffff, 0xffffffff, 0x0d0c0908, 0x05040100);
     const __m128i M32to16H = _mm_set_epi32(0x0d0c0908, 0x05040100, 0xffffffff, 0xffffffff);
-    lo = _mm_and_si128(lo, _mm_cmpgt_epi32(C0, lo));
-    lo = _mm_or_si128(lo, _mm_cmpgt_epi32(C1, lo));
-    hi = _mm_and_si128(lo, _mm_cmpgt_epi32(C0, hi));
-    hi = _mm_or_si128(lo, _mm_cmpgt_epi32(C1, hi));
+    lo = _mm_and_si128(lo, _mm_cmpgt_epi32(lo, C0));
+    lo = _mm_or_si128(lo, _mm_cmpgt_epi32(lo, C1));
+    hi = _mm_and_si128(hi, _mm_cmpgt_epi32(hi, C0));
+    hi = _mm_or_si128(hi, _mm_cmpgt_epi32(hi, C1));
     return _mm_or_si128(_mm_shuffle_epi8(lo, M32to16L),
                         _mm_shuffle_epi8(hi, M32to16H));
 #else
