@@ -160,11 +160,10 @@ static void OneH(const RsForEachStubParamStruct *p, uchar4 *out, int32_t x,
     out->xyzw = convert_uchar4(blurredPixel);
 }
 
-
 static void Blur_uchar4(const RsForEachStubParamStruct *p,
                                     uint32_t xstart, uint32_t xend,
                                     uint32_t instep, uint32_t outstep) {
-    float stackbuf[4 * 2048];
+    float stackbuf[4 * 2048] __attribute__((aligned(0x20)));
     float *buf = &stackbuf[0];
     ConvolveParams *cp = (ConvolveParams *)p->usr;
     if (!cp->alloc.get()) {
