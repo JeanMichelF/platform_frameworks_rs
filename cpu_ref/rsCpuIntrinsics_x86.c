@@ -429,6 +429,43 @@ void rsdIntrinsicBlurHFU4_K(void *dst,
     }
 }
 
+void rsdIntrinsicBlurHFU1_K(void *dst,
+                          const void *pin, const void *gptr,
+                          int rct, int x1, int x2) {
+    const __m128i Mu8 = _mm_set_epi32(0xffffffff, 0xffffffff, 0xffffffff, 0x0c080400);
+    const float *pi;
+    __m128 pf, g0, g1, g2, g3, gx, p0, p1;
+    __m128i o;
+    int r;
+
+    for (; x1 < x2; x1+=4) {
+        g0 = _mm_load_ss((const float *)gptr);
+        g0 = _mm_shuffle_ps(g0, g0, _MM_SHUFFLE(0, 0, 0, 0));
+
+        pi = (const float *)pin + x1;
+        pf = _mm_mul_ps(g0, _mm_loadu_ps(pi));
+
+        for (r = 1; r < rct; r += 4) {
+            gx = _mm_loadu_ps((const float *)gptr + r);
+            p0 = _mm_loadu_ps(pi + r);
+            p1 = _mm_loadu_ps(pi + r + 4);
+
+            g0 = _mm_shuffle_ps(gx, gx, _MM_SHUFFLE(0, 0, 0, 0));
+            pf = _mm_add_ps(pf, _mm_mul_ps(g0, p0));
+            g1 = _mm_shuffle_ps(gx, gx, _MM_SHUFFLE(1, 1, 1, 1));
+            pf = _mm_add_ps(pf, _mm_mul_ps(g1, _mm_alignr_epi8(p1, p0, 4)));
+            g2 = _mm_shuffle_ps(gx, gx, _MM_SHUFFLE(2, 2, 2, 2));
+            pf = _mm_add_ps(pf, _mm_mul_ps(g2, _mm_alignr_epi8(p1, p0, 8)));
+            g3 = _mm_shuffle_ps(gx, gx, _MM_SHUFFLE(3, 3, 3, 3));
+            pf = _mm_add_ps(pf, _mm_mul_ps(g3, _mm_alignr_epi8(p1, p0, 12)));
+        }
+
+        o = _mm_cvtps_epi32(pf);
+        *(int *)dst = _mm_cvtsi128_si32(_mm_shuffle_epi8(o, Mu8));
+        dst = (char *)dst + 4;
+    }
+}
+
 void rsdIntrinsicYuv_K(void *dst,
                        const unsigned char *pY, const unsigned char *pUV,
                        uint32_t count, const short *param) {
