@@ -84,12 +84,13 @@ static inline __m128i blendv_epi8(__m128i x, __m128i y, __m128i mask) {
 #if defined(__SSE4_1__)
     return _mm_blendv_epi8(x, y, mask);
 #elif defined(__SSSE3__)
-    return _mm_or_si128(_mm_andnot_si128(x, mask), _mm_and_si128(y, mask));
+    return _mm_or_si128(_mm_andnot_si128(mask, x), _mm_and_si128(y, mask));
 #else
 #   error "Require at least SSSE3"
 #endif
 }
 
+#if 0 // FIXME: CTS failure, need investigation.
 void rsdIntrinsicConvolve3x3_K(void *dst,
                                const void *y0, const void *y1, const void *y2,
                                const short *coef, uint32_t count) {
@@ -197,6 +198,71 @@ void rsdIntrinsicConvolve3x3_K(void *dst,
         dst = (char *)dst + 8;
     }
 }
+
+#else // previous optimized version
+void rsdIntrinsicConvolve3x3_K(void *dst,
+                               const void *y0, const void *y1, const void *y2,
+                               const short *coef, uint32_t count) {
+    __m128i x;
+    __m128i c0, c2, c4, c6, c8;
+    __m128i r0, r1, r2;
+    __m128i p0, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11;
+    __m128i o0, o1;
+    uint32_t i;
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+0));
+    c0 = _mm_shuffle_epi32(x, 0x00);
+    c2 = _mm_shuffle_epi32(x, 0x55);
+    x = _mm_loadl_epi64((const __m128i *)(coef+4));
+    c4 = _mm_shuffle_epi32(x, 0x00);
+    c6 = _mm_shuffle_epi32(x, 0x55);
+    x = _mm_loadl_epi64((const __m128i *)(coef+8));
+    c8 = _mm_shuffle_epi32(x, 0x00);
+
+    for (i = 0; i < count; ++i) {
+
+        p0 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0)), _mm_setzero_si128());
+        p1 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+1)), _mm_setzero_si128());
+        p2 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+2)), _mm_setzero_si128());
+        p3 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+3)), _mm_setzero_si128());
+        p4 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1)), _mm_setzero_si128());
+        p5 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+1)), _mm_setzero_si128());
+        p6 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+2)), _mm_setzero_si128());
+        p7 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+3)), _mm_setzero_si128());
+        p8 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2)), _mm_setzero_si128());
+        p9 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+1)), _mm_setzero_si128());
+        p10 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+2)), _mm_setzero_si128());
+        p11 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+3)), _mm_setzero_si128());
+
+        o0 = _mm_madd_epi16(_mm_unpacklo_epi16(p0, p1), c0);
+        o1 = _mm_madd_epi16(_mm_unpacklo_epi16(p1, p2), c0);
+
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16(_mm_unpacklo_epi16(p2, p4), c2));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16(_mm_unpacklo_epi16(p3, p5), c2));
+
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16(_mm_unpacklo_epi16(p5, p6), c4));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16(_mm_unpacklo_epi16(p6, p7), c4));
+
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16(_mm_unpacklo_epi16(p8, p9), c6));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16(_mm_unpacklo_epi16(p9, p10), c6));
+
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16(_mm_unpacklo_epi16(p10, _mm_setzero_si128()), c8));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16(_mm_unpacklo_epi16(p11, _mm_setzero_si128()), c8));
+
+        o0 = _mm_srai_epi32(o0, 8);
+        o1 = _mm_srai_epi32(o1, 8);
+
+        o0 = packus_epi32(o0, o1);
+        o0 = _mm_packus_epi16(o0, o0);
+        _mm_storel_epi64((__m128i *)dst, o0);
+
+        y0 = (const char *)y0 + 8;
+        y1 = (const char *)y1 + 8;
+        y2 = (const char *)y2 + 8;
+        dst = (char *)dst + 8;
+    }
+}
+#endif
 
 void rsdIntrinsicColorMatrix4x4_K(void *dst, const void *src,
                                   const short *coef, uint32_t count) {
@@ -652,6 +718,7 @@ void rsdIntrinsicYuv2_K(void *dst,
     }
 }
 
+#if 0 // FIXME: CTS failure, need investigation.
 void rsdIntrinsicConvolve5x5_K(void *dst, const void *y0, const void *y1,
                                const void *y2, const void *y3, const void *y4,
                                const short *coef, uint32_t count) {
@@ -1059,6 +1126,170 @@ void rsdIntrinsicConvolve5x5_K(void *dst, const void *y0, const void *y1,
     }
 }
 
+#else // previous optimized version
+void rsdIntrinsicConvolve5x5_K(void *dst, const void *y0, const void *y1,
+                               const void *y2, const void *y3, const void *y4,
+                               const short *coef, uint32_t count) {
+    __m128i x;
+    __m128i c0, c2, c4, c6, c8, c10, c12;
+    __m128i c14, c16, c18, c20, c22, c24;
+    __m128i r0, r1, r2, r3, r4, r5, r6, r7, r8, r9;
+    __m128i p0,  p1,  p2,  p3,  p4,  p5,  p6,  p7;
+    __m128i p8,  p9, p10, p11, p12, p13, p14, p15;
+    __m128i p16, p17, p18, p19, p20, p21, p22, p23;
+    __m128i p24, p25, p26, p27, p28, p29, p30, p31;
+    __m128i p32, p33, p34, p35, p36, p37, p38, p39;
+    __m128i o0, o1, o2, o3;
+    uint32_t i;
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+0));
+    c0  = _mm_shuffle_epi32(x, 0x00);
+    c2  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+4));
+    c4  = _mm_shuffle_epi32(x, 0x00);
+    c6  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+8));
+    c8  = _mm_shuffle_epi32(x, 0x00);
+    c10  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+12));
+    c12  = _mm_shuffle_epi32(x, 0x00);
+    c14  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+16));
+    c16  = _mm_shuffle_epi32(x, 0x00);
+    c18  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+20));
+    c20  = _mm_shuffle_epi32(x, 0x00);
+    c22  = _mm_shuffle_epi32(x, 0x55);
+
+    x = _mm_loadl_epi64((const __m128i *)(coef+24));
+    c24  = _mm_shuffle_epi32(x, 0x00);
+
+    for (i = 0; i < count; ++i) {
+
+        p0 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*(int32_t *)y0), _mm_setzero_si128());
+        p1 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+1)), _mm_setzero_si128());
+        p2 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+2)), _mm_setzero_si128());
+        p3 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+3)), _mm_setzero_si128());
+        p4 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+4)), _mm_setzero_si128());
+        p5 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+5)), _mm_setzero_si128());
+        p6 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+6)), _mm_setzero_si128());
+        p7 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y0+7)), _mm_setzero_si128());
+
+        p8 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1)), _mm_setzero_si128());
+        p9 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+1)), _mm_setzero_si128());
+        p10 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+2)), _mm_setzero_si128());
+        p11 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+3)), _mm_setzero_si128());
+        p12 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+4)), _mm_setzero_si128());
+        p13 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+5)), _mm_setzero_si128());
+        p14 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+6)), _mm_setzero_si128());
+        p15 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y1+7)), _mm_setzero_si128());
+
+        p16 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2)), _mm_setzero_si128());
+        p17 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+1)), _mm_setzero_si128());
+        p18 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+2)), _mm_setzero_si128());
+        p19 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+3)), _mm_setzero_si128());
+        p20 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+4)), _mm_setzero_si128());
+        p21 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+5)), _mm_setzero_si128());
+        p22 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+6)), _mm_setzero_si128());
+        p23 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y2+7)), _mm_setzero_si128());
+
+        p24 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3)), _mm_setzero_si128());
+        p25 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+1)), _mm_setzero_si128());
+        p26 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+2)), _mm_setzero_si128());
+        p27 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+3)), _mm_setzero_si128());
+        p28 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+4)), _mm_setzero_si128());
+        p29 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+5)), _mm_setzero_si128());
+        p30 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+6)), _mm_setzero_si128());
+        p31 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y3+7)), _mm_setzero_si128());
+
+        p32 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4)), _mm_setzero_si128());
+        p33 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+1)), _mm_setzero_si128());
+        p34 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+2)), _mm_setzero_si128());
+        p35 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+3)), _mm_setzero_si128());
+        p36 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+4)), _mm_setzero_si128());
+        p37 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+5)), _mm_setzero_si128());
+        p38 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+6)), _mm_setzero_si128());
+        p39 = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*((int32_t *)y4+7)), _mm_setzero_si128());
+
+        o0 =                   _mm_madd_epi16( _mm_unpacklo_epi16(p0, p1),  c0);
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p2, p3),  c2));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p4, p8),  c4));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p9,p10),  c6));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p11, p12),  c8));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p16, p17), c10));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p18, p19), c12));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p20, p24), c14));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p25,p26), c16));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p27, p28), c18));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p32, p33), c20));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p34, p35), c22));
+        o0 = _mm_add_epi32(o0, _mm_madd_epi16( _mm_unpacklo_epi16(p36, _mm_setzero_si128()), c24));
+        o0 = _mm_srai_epi32(o0, 8);
+
+        o1 =                   _mm_madd_epi16( _mm_unpacklo_epi16(p1, p2),  c0);
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p3,p4),  c2));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p5, p9),  c4));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p10,p11),  c6));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p12,p13),  c8));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p17,p18), c10));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p19,p20), c12));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p21,p25), c14));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p26, p27), c16));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p28, p29), c18));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p33, p34), c20));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p35, p36), c22));
+        o1 = _mm_add_epi32(o1, _mm_madd_epi16( _mm_unpacklo_epi16(p37, _mm_setzero_si128()), c24));
+        o1 = _mm_srai_epi32(o1, 8);
+
+        o2 =                   _mm_madd_epi16( _mm_unpacklo_epi16(p2,p3),  c0);
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p4, p5),  c2));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p6, p10),  c4));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p11, p12),  c6));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p13, p14),  c8));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p18, p19), c10));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p20, p21), c12));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p22, p26), c14));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p27, p28), c16));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p29, p30), c18));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p34, p35), c20));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p36, p37), c22));
+        o2 = _mm_add_epi32(o2, _mm_madd_epi16( _mm_unpacklo_epi16(p38, _mm_setzero_si128()), c24));
+        o2 = _mm_srai_epi32(o2, 8);
+
+        o3 =                   _mm_madd_epi16( _mm_unpacklo_epi16(p3,p4),  c0);
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p5, p6),  c2));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p7, p11),  c4));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p12, p13),  c6));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p14, p15),  c8));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p19, p20), c10));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p21, p22), c12));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p23, p27), c14));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p28, p29), c16));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p30, p31), c18));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p35, p36), c20));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p37,p38), c22));
+        o3 = _mm_add_epi32(o3, _mm_madd_epi16( _mm_unpacklo_epi16(p39, _mm_setzero_si128()), c24));
+        o3 = _mm_srai_epi32(o3, 8);
+
+        o0 = packus_epi32(o0, o1);
+        o2 = packus_epi32(o2, o3);
+        o0 = _mm_packus_epi16(o0, o2);
+        _mm_storeu_si128((__m128i *)dst, o0);
+
+        y0 = (const char *)y0 + 16;
+        y1 = (const char *)y1 + 16;
+        y2 = (const char *)y2 + 16;
+        y3 = (const char *)y3 + 16;
+        y4 = (const char *)y4 + 16;
+        dst = (char *)dst + 16;
+    }
+}
+#endif
 
 void rsdIntrinsicBlendSrcOver_K(void *dst, const void *src, uint32_t count8) {
     __m128i all1s, ina, ins;
@@ -1079,7 +1310,7 @@ void rsdIntrinsicBlendSrcOver_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t0 = _mm_unpacklo_epi8(out0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, _mm_sub_epi16(all1s, ina));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
         t0 = _mm_add_epi16(t0, ins);
 
         ins = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
@@ -1087,7 +1318,7 @@ void rsdIntrinsicBlendSrcOver_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t1 = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, _mm_sub_epi16(all1s, ina));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
         t1 = _mm_add_epi16(t1, ins);
 
         ins = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
@@ -1095,7 +1326,7 @@ void rsdIntrinsicBlendSrcOver_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t2 = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, _mm_sub_epi16(all1s, ina));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
         t2 = _mm_add_epi16(t2, ins);
 
         ins = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
@@ -1103,7 +1334,7 @@ void rsdIntrinsicBlendSrcOver_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t3 = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, _mm_sub_epi16(all1s, ina));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
         t3 = _mm_add_epi16(t3, ins);
 
         t0 = _mm_packus_epi16(t0, t1);
@@ -1130,13 +1361,12 @@ void rsdIntrinsicBlendDstOver_K(void *dst, const void *src, uint32_t count8) {
         out0 = _mm_loadu_si128((const __m128i *)dst);
         out1 = _mm_loadu_si128((const __m128i *)dst + 1);
 
-
         outs = _mm_unpacklo_epi8(out0, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outs, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t0 = _mm_unpacklo_epi8(in0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, _mm_sub_epi16(all1s, outa));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
         t0 = _mm_add_epi16(t0, outs);
 
         outs = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
@@ -1144,7 +1374,7 @@ void rsdIntrinsicBlendDstOver_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t1 = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, _mm_sub_epi16(all1s, outa));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
         t1 = _mm_add_epi16(t1, outs);
 
         outs = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
@@ -1152,7 +1382,7 @@ void rsdIntrinsicBlendDstOver_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t2 = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, _mm_sub_epi16(all1s, outa));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
         t2 = _mm_add_epi16(t2, outs);
 
         outs = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
@@ -1160,7 +1390,7 @@ void rsdIntrinsicBlendDstOver_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t3 = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, _mm_sub_epi16(all1s, outa));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
         t3 = _mm_add_epi16(t3, outs);
 
         t0 = _mm_packus_epi16(t0, t1);
@@ -1190,28 +1420,28 @@ void rsdIntrinsicBlendSrcIn_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t0 = _mm_unpacklo_epi8(in0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, outa);
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
 
         outa = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t1 = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, outa);
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
 
         outa = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t2 = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, outa);
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
 
         outa = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t3 = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, outa);
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t2 = _mm_packus_epi16(t2, t3);
@@ -1240,28 +1470,28 @@ void rsdIntrinsicBlendDstIn_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t0 = _mm_unpacklo_epi8(out0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, ina);
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
 
         ina = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t1 = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, ina);
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
 
         ina = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t2 = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, ina);
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
 
         ina = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t3 = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, ina);
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t2 = _mm_packus_epi16(t2, t3);
@@ -1292,28 +1522,28 @@ void rsdIntrinsicBlendSrcOut_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t0 = _mm_unpacklo_epi8(in0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, _mm_sub_epi16(all1s, outa));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
 
         outa = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t1 = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, _mm_sub_epi16(all1s, outa));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
 
         outa = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t2 = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, _mm_sub_epi16(all1s, outa));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
 
         outa = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
         outa = _mm_shufflelo_epi16(outa, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t3 = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, _mm_sub_epi16(all1s, outa));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t2 = _mm_packus_epi16(t2, t3);
@@ -1344,28 +1574,28 @@ void rsdIntrinsicBlendDstOut_K(void *dst, const void *src, uint32_t count8) {
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t0 = _mm_unpacklo_epi8(out0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, _mm_sub_epi16(all1s, ina));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
 
         ina = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t1 = _mm_unpackhi_epi8(out0, _mm_setzero_si128());
         t1 = _mm_mullo_epi16(t1, _mm_sub_epi16(all1s, ina));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_srli_epi16(t1, 8);
 
         ina = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t2 = _mm_unpacklo_epi8(out1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, _mm_sub_epi16(all1s, ina));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
 
         ina = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ina, 0xFF);
         ina = _mm_shufflehi_epi16(ina, 0xFF);
         t3 = _mm_unpackhi_epi8(out1, _mm_setzero_si128());
         t3 = _mm_mullo_epi16(t3, _mm_sub_epi16(all1s, ina));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t2 = _mm_packus_epi16(t2, t3);
@@ -1378,7 +1608,7 @@ void rsdIntrinsicBlendDstOut_K(void *dst, const void *src, uint32_t count8) {
 }
 
 void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
-    const __m128i M0001 = _mm_set_epi32(0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff);
+    const __m128i M0001 = _mm_set_epi32(0xff000000, 0xff000000, 0xff000000, 0xff000000);
     __m128i all1s, ina, outa, ins, outs;
     __m128i in0, in1, out0, out1;
     __m128i t0, t1, t2, t3;
@@ -1400,8 +1630,8 @@ void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t0 = _mm_sub_epi16(all1s, ina);
         t0 = _mm_mullo_epi16(t0, outs);
-        t0 = _mm_add_epi16(t0, _mm_mullo_epi16(outa, ins));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_adds_epu16(t0, _mm_mullo_epi16(outa, ins));
+        t0 = _mm_srli_epi16(t0, 8);
 
         ins = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1411,8 +1641,8 @@ void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t1 = _mm_sub_epi16(all1s, ina);
         t1 = _mm_mullo_epi16(t1, outs);
-        t1 = _mm_add_epi16(t1, _mm_mullo_epi16(outa, ins));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_adds_epu16(t1, _mm_mullo_epi16(outa, ins));
+        t1 = _mm_srli_epi16(t1, 8);
 
         ins = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1422,8 +1652,8 @@ void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t2 = _mm_sub_epi16(all1s, ina);
         t2 = _mm_mullo_epi16(t2, outs);
-        t2 = _mm_add_epi16(t2, _mm_mullo_epi16(outa, ins));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_adds_epu16(t2, _mm_mullo_epi16(outa, ins));
+        t2 = _mm_srli_epi16(t2, 8);
 
         ins = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1433,8 +1663,8 @@ void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t3 = _mm_sub_epi16(all1s, ina);
         t3 = _mm_mullo_epi16(t3, outs);
-        t3 = _mm_add_epi16(t3, _mm_mullo_epi16(outa, ins));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_adds_epu16(t3, _mm_mullo_epi16(outa, ins));
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t0 = blendv_epi8(t0, out0, M0001);
@@ -1449,7 +1679,7 @@ void rsdIntrinsicBlendSrcAtop_K(void *dst, const void *src, uint32_t count8) {
 }
 
 void rsdIntrinsicBlendDstAtop_K(void *dst, const void *src, uint32_t count8) {
-    const __m128i M0001 = _mm_set_epi32(0x000000ff, 0x000000ff, 0x000000ff, 0x000000ff);
+    const __m128i M0001 = _mm_set_epi32(0xff000000, 0xff000000, 0xff000000, 0xff000000);
     __m128i all1s, ina, ins, outa, outs;
     __m128i in0, in1, out0, out1;
     __m128i t0, t1, t2, t3;
@@ -1470,9 +1700,9 @@ void rsdIntrinsicBlendDstAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflelo_epi16(outs, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t0 = _mm_sub_epi16(all1s, outa);
-        t0 = _mm_mullo_epi16(t0, outs);
-        t0 = _mm_add_epi16(t0, _mm_mullo_epi16(ina, ins));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_mullo_epi16(t0, ins);
+        t0 = _mm_adds_epu16(t0, _mm_mullo_epi16(ina, outs));
+        t0 = _mm_srli_epi16(t0, 8);
 
         ins = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1481,9 +1711,9 @@ void rsdIntrinsicBlendDstAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflelo_epi16(outs, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t1 = _mm_sub_epi16(all1s, outa);
-        t1 = _mm_mullo_epi16(t1, outs);
-        t1 = _mm_add_epi16(t1, _mm_mullo_epi16(ina, ins));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_mullo_epi16(t1, ins);
+        t1 = _mm_adds_epu16(t1, _mm_mullo_epi16(ina, outs));
+        t1 = _mm_srli_epi16(t1, 8);
 
         ins = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1492,9 +1722,9 @@ void rsdIntrinsicBlendDstAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflelo_epi16(outs, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t2 = _mm_sub_epi16(all1s, outa);
-        t2 = _mm_mullo_epi16(t2, outs);
-        t2 = _mm_add_epi16(t2, _mm_mullo_epi16(ina, ins));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_mullo_epi16(t2, ins);
+        t2 = _mm_adds_epu16(t2, _mm_mullo_epi16(ina, outs));
+        t2 = _mm_srli_epi16(t2, 8);
 
         ins = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
         ina = _mm_shufflelo_epi16(ins, 0xFF);
@@ -1503,9 +1733,9 @@ void rsdIntrinsicBlendDstAtop_K(void *dst, const void *src, uint32_t count8) {
         outa = _mm_shufflelo_epi16(outs, 0xFF);
         outa = _mm_shufflehi_epi16(outa, 0xFF);
         t3 = _mm_sub_epi16(all1s, outa);
-        t3 = _mm_mullo_epi16(t3, outs);
-        t3 = _mm_add_epi16(t3, _mm_mullo_epi16(ina, ins));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_mullo_epi16(t3, ins);
+        t3 = _mm_adds_epu16(t3, _mm_mullo_epi16(ina, outs));
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t0 = blendv_epi8(t0, out0, M0001);
@@ -1553,19 +1783,19 @@ void rsdIntrinsicBlendMultiply_K(void *dst, const void *src, uint32_t count8) {
 
         t0 = _mm_unpacklo_epi8(in0, _mm_setzero_si128());
         t0 = _mm_mullo_epi16(t0, _mm_unpacklo_epi8(out0, _mm_setzero_si128()));
-        t0 = _mm_srai_epi16(t0, 8);
+        t0 = _mm_srli_epi16(t0, 8);
 
         t1 = _mm_unpackhi_epi8(in0, _mm_setzero_si128());
-        t1 = _mm_mullo_epi16(t1, _mm_unpackhi_epi8(in0, _mm_setzero_si128()));
-        t1 = _mm_srai_epi16(t1, 8);
+        t1 = _mm_mullo_epi16(t1, _mm_unpackhi_epi8(out0, _mm_setzero_si128()));
+        t1 = _mm_srli_epi16(t1, 8);
 
         t2 = _mm_unpacklo_epi8(in1, _mm_setzero_si128());
         t2 = _mm_mullo_epi16(t2, _mm_unpacklo_epi8(out1, _mm_setzero_si128()));
-        t2 = _mm_srai_epi16(t2, 8);
+        t2 = _mm_srli_epi16(t2, 8);
 
         t3 = _mm_unpackhi_epi8(in1, _mm_setzero_si128());
-        t3 = _mm_mullo_epi16(t0, _mm_unpackhi_epi8(out1, _mm_setzero_si128()));
-        t3 = _mm_srai_epi16(t3, 8);
+        t3 = _mm_mullo_epi16(t3, _mm_unpackhi_epi8(out1, _mm_setzero_si128()));
+        t3 = _mm_srli_epi16(t3, 8);
 
         t0 = _mm_packus_epi16(t0, t1);
         t2 = _mm_packus_epi16(t2, t3);

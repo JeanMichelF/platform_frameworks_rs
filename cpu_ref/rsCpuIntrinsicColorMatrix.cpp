@@ -895,7 +895,8 @@ void RsdCpuScriptIntrinsicColorMatrix::preLaunch(
 #if defined(ARCH_X86_HAVE_SSSE3)
 
     if ((mOptKernel == NULL) || (mLastKey.key != key.key)) {
-        mOptKernel = (void (*)(void *, const void *, const short *, uint32_t)) selectKernel(key);
+        // FIXME: Disable mOptKernel to pass RS color matrix CTS cases
+        // mOptKernel = (void (*)(void *, const void *, const short *, uint32_t)) selectKernel(key);
         mLastKey = key;
     }
 

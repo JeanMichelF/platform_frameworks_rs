@@ -368,7 +368,7 @@ void RsdCpuScriptIntrinsicBlur::kernelU1(const RsForEachStubParamStruct *p,
         out++;
         x1++;
     }
-#if defined(ARCH_ARM_HAVE_VFP)
+#if defined(ARCH_ARM_HAVE_VFP) || defined(ARCH_X86_HAVE_SSSE3)
     if (gArchUseSIMD) {
         if ((x1 + cp->mIradius) < x2) {
             uint32_t len = x2 - (x1 + cp->mIradius);

@@ -379,7 +379,9 @@ static size_t computeAlignment(size_t elementSize) {
     alignment++;
     // Round alignment to multiple of sizeof(void *).
     alignment = ((alignment + ptrSize - 1) / ptrSize) * ptrSize;
-    return alignment;
+
+    // Reducing alignment below 16 bytes may actually reduce performance with minimal efficiency gains
+    return (alignment > 16 ? alignment : 16);
 }
 
 static uint8_t* allocAlignedMemory(size_t allocSize, bool forceZero, size_t alignment) {
